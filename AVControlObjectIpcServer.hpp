@@ -56,6 +56,10 @@ private:
     std::map<std::intptr_t, AVControlObject*> m_objects;
 };
 
-
+// These functions let actual backend code publish its concrete instances
+// so server handlers can create AVControlObject instances using real threads/sinks.
+void AVControlObjectIpcServer_setCommandThread(AnyCommandThread* thread);
+void AVControlObjectIpcServer_setMediaDataSink(MediaDataSink* sink);
+void AVControlObjectIpcServer_setEventGenerator(AnyAVControlObjectEventGenerator* eg);
 
 #endif // CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCSERVER_HPP_INCLUDED
