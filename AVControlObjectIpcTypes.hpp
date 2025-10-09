@@ -1,0 +1,17 @@
+#ifndef CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCTYPES_HPP_INCLUDED
+#define CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCTYPES_HPP_INCLUDED
+
+#include "3rd_party_wrapper/rpclib/include/IpcTypes.hpp"
+#include "nebula/core/browser_client/AnyAVControlObject.hpp"
+
+DECLARE_IPC_NAME(AVControlObject_Create);
+DECLARE_IPC_NAME(AVControlObject_Destroy);
+DECLARE_IPC_NAME(AVControlObject_SetSource);
+DECLARE_IPC_NAME(AVControlObject_Play);
+DECLARE_IPC_NAME(AVControlObject_Seek);
+DECLARE_IPC_NAME(AVControlObject_Stop);
+DECLARE_IPC_NAME(AVControlObject_SetVideoOutputWindow);
+
+MSGPACK_ADD_ENUM(NEBULA_MediaPlayerStatus);
+
+#endif // CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCTYPES_HPP_INCLUDED

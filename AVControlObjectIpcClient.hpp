@@ -1,58 +1,34 @@
-#ifndef CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCCLIENT_HPP_INCLUDED
-#define CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCCLIENT_HPP_INCLUDED
+// AVControlObjectIpcClient.hpp (snippet)
+#pragma once
 
-#include "nebula/core/browser_client/AnyAVControlObject.hpp"
-#include "utilities_private/CommandThread.hpp"
+#include "nebula/core/browser_client/AnyAVControlObject.hpp"    // for base class and types
+#include "nebula_src/adaptation_layer/ipc/external/NebulaIpcHelper.hpp" // for nebulaRpcCall, IPC_NAME
+#include "nebula/core/browser_client/AnyAVControlObjectEventGenerator.hpp"
+
+#include "utilities_public/AnyCommandThread.hpp"
 #include "utilities_public/MediaDataSource.hpp"
 #include "utilities_public/MediaDataSink.hpp"
-#include "AVControlObjectIpcTypes.hpp"
+#include <cstdint>
+#include <string>
 
-// Forward declaration
-class AnyAVControlObjectEventGenerator;
-
-/**
- * @brief IPC Client for AVControlObject that runs in the browser process
- */
-class AVControlObjectIpcClient : public AnyAVControlObject
-{
+class AVControlObjectIpcClient : public AnyAVControlObject {
 public:
-    /**
-     * @brief Constructor - creates remote AVControlObject via RPC
-     */
     AVControlObjectIpcClient(AnyCommandThread& media_queue,
-                           int streaming_type,  // Use int instead of enum to avoid dependencies
-                           MediaDataSource const& media_data_source,
-                           MediaDataSink& media_data_sink,
-                           AnyAVControlObjectEventGenerator& event_generator,
-                           char* origin);
+                             int streaming_type,
+                             const MediaDataSource& media_data_source,
+                             MediaDataSink& media_data_sink,
+                             AnyAVControlObjectEventGenerator& event_generator,
+                             char* origin);
+    virtual ~AVControlObjectIpcClient();
 
-    /**
-     * @brief Destructor - destroys remote AVControlObject via RPC
-     */
-    virtual ~AVControlObjectIpcClient() override;
+    // implement the interface required by AnyAVControlObject
+    ExplodingBoolean isInitialised() const override;
 
-    // AnyAVControlObject interface implementation - only implement methods that exist in base class
-    virtual ExplodingBoolean isInitialised() const override;
-    virtual bool setSource(const char* url) override;
-    virtual bool play() override;
-    virtual void stop() override;
-    virtual bool setSpeed(int speed) override;
-    virtual bool setFullScreen(bool fullscreen) override;
-    virtual bool setVisibility(bool visible) override;
-    virtual bool getCurrentPosition(std::int64_t& position_msecs) override;
-    virtual NEBULA_MediaPlayerStatus getPlaybackStatus() override;
-    virtual bool suspend(bool suspend) override;
-    virtual bool setCookies(char const* cookies) override;
-
-    // Remove methods that don't exist in the base class or implement as needed
-
+    bool setSource(const char* url) override;
+    bool play() override;
+    void stop() override;
+    bool seek(double position_in_msecs) override;
+    // ... implement or stub other pure virtuals from AnyAVControlObject to make class concrete
 private:
-    std::intptr_t m_remote_handle = 0;
-    bool m_initialised = false;
-
-    // Prevent copying
-    AVControlObjectIpcClient(const AVControlObjectIpcClient&) = delete;
-    AVControlObjectIpcClient& operator=(const AVControlObjectIpcClient&) = delete;
+    std::int64_t m_handle; // handle returned by server
 };
-
-#endif // CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCCLIENT_HPP_INCLUDED

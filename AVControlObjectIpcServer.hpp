@@ -25,7 +25,7 @@ public:
     static AVControlObjectIpcServer& instance();
 
     bool createAVControlObject(AnyCommandThread& media_queue,
-                              nebula::StreamingType streaming_type,
+                              int streaming_type,
                               MediaDataSource const& media_data_source,
                               MediaDataSink& media_data_sink,
                               AnyAVControlObjectEventGenerator& event_generator,
@@ -44,7 +44,8 @@ public:
     bool setVisibility(std::intptr_t handle, bool visible);
     bool getCurrentPosition(std::intptr_t handle, std::int64_t& position_msecs);
     bool isInitialised(std::intptr_t handle) const;
-
+    // Declare the binding function
+    static void bindToServer(rpc::server& server);
 private:
     AVControlObjectIpcServer() = default;
     ~AVControlObjectIpcServer() = default;
@@ -55,7 +56,6 @@ private:
     std::map<std::intptr_t, AVControlObject*> m_objects;
 };
 
-// Declare the binding function
-void bindAVControlObjectServer(rpc::server& server);
+
 
 #endif // CABOT_VEWD_INTEGRATION_IPC_AVCONTROLOBJECTIPCSERVER_HPP_INCLUDED

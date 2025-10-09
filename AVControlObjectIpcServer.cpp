@@ -1,149 +1,68 @@
 #include "AVControlObjectIpcServer.hpp"
-#include "3rd_party_wrapper/rpclib/include/CommonIpcServer.hpp"
-#include "utilities_debug/trace.h"
+#include "AVControlObjectIpcTypes.hpp"
 
-// Include the rpc header for the implementation
-#include <rpc/server.h>
+#include "nebula/core/browser_client/AVControlObject.hpp"   // provides AVControlObject class
+#include "nebula_src/adaptation_layer/ipc/external/NebulaIpcHelper.hpp" // for IPC_NAME / server reference (adjust path)
+#include <map>
+#include <atomic>
 
-TRACE_IMPLEMENT("avcontrolobject/ipcserver");
+// storage for created backend objects
+static std::map<std::int64_t, AVControlObject*> s_instances;
+static std::atomic<std::int64_t> s_next_handle(1);
 
-AVControlObjectIpcServer&
-AVControlObjectIpcServer::instance()
-{
-    static AVControlObjectIpcServer the_instance;
-    return the_instance;
+// named handler functions (avoid complicated lambda signatures)
+static std::int64_t handle_create(int streaming_type, const std::string& origin) {
+    // TODO: wire real AnyCommandThread, MediaDataSource, MediaDataSink and event generator
+    AnyCommandThread& cmdThread = getGlobalMediaCommandThread(); // implement or pass through registration
+    MediaDataSource src;
+    MediaDataSink* sink = getMediaDataSink(); // implement or retrieve
+    AnyAVControlObjectEventGenerator* eventGen = getEventGeneratorForAv(); // implement or retrieve
+
+    AVControlObject* obj = new AVControlObject(cmdThread, (AVControlObject::StreamingType)streaming_type,
+                                               src, *sink, *eventGen, const_cast<char*>(origin.c_str()));
+    std::int64_t h = s_next_handle.fetch_add(1);
+    s_instances[h] = obj;
+    return h;
 }
 
-// In the create method:
-bool
-AVControlObjectIpcServer::createAVControlObject(AnyCommandThread& media_queue,
-                                              int streaming_type,  // Use int
-                                              MediaDataSource const& media_data_source,
-                                              MediaDataSink& media_data_sink,
-                                              AnyAVControlObjectEventGenerator& event_generator,
-                                              char* origin,
-                                              std::intptr_t& handle_out)
-{
-    TRACE_INFO(("createAVControlObject: streaming_type=%d\n", streaming_type));
-
-    // Convert integer to AVControlObject::StreamingType
-    AVControlObject::StreamingType av_streaming_type;
-    switch(streaming_type) {
-        case 0: av_streaming_type = AVControlObject::progressive; break;
-        case 1: av_streaming_type = AVControlObject::mse; break;
-        case 2: av_streaming_type = AVControlObject::rtsp; break;
-        case 3: av_streaming_type = AVControlObject::udp; break;
-        default: av_streaming_type = AVControlObject::progressive; break;
-    }
-
-    // Rest of the method remains the same...
-    auto* av_object = new AVControlObject(media_queue, av_streaming_type,
-                                        media_data_source, media_data_sink,
-                                        event_generator, origin);
-
-    if (av_object && av_object->isInitialised()) {
-        handle_out = reinterpret_cast<std::intptr_t>(av_object);
-        m_objects[handle_out] = av_object;
-        TRACE_INFO(("Created AVControlObject with handle: %p\n", (void*)handle_out));
-        return true;
-    }
-
-    TRACE_ERROR(("Failed to create AVControlObject\n"));
-    delete av_object;
-    return false;
+static bool handle_setSource(std::int64_t handle, const std::string& url) {
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return false;
+    return it->second->setSource(url.c_str());
 }
 
-bool
-AVControlObjectIpcServer::destroyAVControlObject(std::intptr_t handle)
-{
-    TRACE_INFO(("destroyAVControlObject: handle=%p\n", (void*)handle));
-
-    auto it = m_objects.find(handle);
-    if (it != m_objects.end()) {
-        delete it->second;
-        m_objects.erase(it);
-        TRACE_INFO(("Destroyed AVControlObject with handle: %p\n", (void*)handle));
-        return true;
-    }
-
-    TRACE_WARN(("AVControlObject handle not found: %p\n", (void*)handle));
-    return false;
+static bool handle_play(std::int64_t handle) {
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return false;
+    return it->second->play();
 }
 
-bool
-AVControlObjectIpcServer::setSource(std::intptr_t handle, const std::string& url)
-{
-    auto it = m_objects.find(handle);
-    if (it != m_objects.end()) {
-        TRACE_INFO(("setSource: handle=%p, url=%s\n", (void*)handle, url.c_str()));
-        return it->second->setSource(url.c_str());
-    }
-    return false;
+static bool handle_stop(std::int64_t handle) {
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return false;
+    it->second->stop();
+    return true;
 }
 
-bool
-AVControlObjectIpcServer::play(std::intptr_t handle)
-{
-    auto it = m_objects.find(handle);
-    if (it != m_objects.end()) {
-        TRACE_INFO(("play: handle=%p\n", (void*)handle));
-        return it->second->play();
-    }
-    return false;
+static bool handle_seek(std::int64_t handle, long long ms) {
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return false;
+    return it->second->seek(static_cast<double>(ms));
 }
 
-bool
-AVControlObjectIpcServer::stop(std::intptr_t handle)
-{
-    auto it = m_objects.find(handle);
-    if (it != m_objects.end()) {
-        TRACE_INFO(("stop: handle=%p\n", (void*)handle));
-        it->second->stop();
-        return true;
-    }
-    return false;
+static void handle_destroy(std::int64_t handle) {
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return;
+    delete it->second;
+    s_instances.erase(it);
 }
 
-bool
-AVControlObjectIpcServer::setVideoOutputWindow(std::intptr_t handle, const NEBULA_DisplayWindow& window, bool apply)
-{
-    auto it = m_objects.find(handle);
-    if (it != m_objects.end()) {
-        TRACE_INFO(("setVideoOutputWindow: handle=%p\n", (void*)handle));
-        return it->second->setVideoOutputWindow(const_cast<NEBULA_DisplayWindow*>(&window), apply);
-    }
-    return false;
-}
-
-// Implement other methods similarly...
-
-void bindAVControlObjectServer(rpc::server& server)
-{
-    TRACE_ALWAYS(("Binding AVControlObject IPC server methods\n"));
-
-    auto& instance = AVControlObjectIpcServer::instance();
-
-    server.bind(IPC_NAME(AVControlObject_Create), [&instance](
-        int streaming_type, const std::string& origin) {
-
-        TRACE_INFO(("RPC: AVControlObject_Create called\n"));
-
-        // For now, create with simplified parameters
-        MediaDataSource data_source;
-        MediaDataSink data_sink;
-
-        std::intptr_t handle = 0;
-        bool success = instance.createAVControlObject(
-            *static_cast<AnyCommandThread*>(nullptr), // Need actual queue
-            static_cast<nebula::StreamingType>(streaming_type),
-            data_source, data_sink,
-            *static_cast<AnyAVControlObjectEventGenerator*>(nullptr), // Need actual event generator
-            const_cast<char*>(origin.c_str()), handle);
-
-        TRACE_INFO(("RPC: AVControlObject_Create result: success=%d, handle=%p\n",
-                   success, (void*)handle));
-        return std::make_tuple(success, handle);
-    });
-
-    // Bind other methods...
+// ---- Binding ----
+void AVControlObjectIpcServer::bindToServer(rpc::server& server) {
+    server.bind(IPC_NAME(AVControlObject_Create), handle_create);
+    server.bind(IPC_NAME(AVControlObject_SetSource), handle_setSource);
+    server.bind(IPC_NAME(AVControlObject_Play), handle_play);
+    server.bind(IPC_NAME(AVControlObject_Stop), handle_stop);
+    server.bind(IPC_NAME(AVControlObject_Seek), handle_seek);
+    server.bind(IPC_NAME(AVControlObject_Destroy), handle_destroy);
 }
