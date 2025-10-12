@@ -40,7 +40,7 @@ void AVControlObjectIpcServer_setEventGenerator(AnyAVControlObjectEventGenerator
     s_event_generator = eg;
 }
 
-static bool ensureDependenciesInitialized() {
+/*static bool ensureDependenciesInitialized() {
     if (!s_command_thread || !s_media_data_sink || !s_event_generator) {
         TRACE_WARN(("Using fallback dependencies\n"));
 
@@ -56,17 +56,17 @@ static bool ensureDependenciesInitialized() {
     }
 
     return (s_command_thread && s_media_data_sink && s_event_generator);
-}
+}*/
 
 // RPC handler: Create
 static std::int64_t handle_create(int streaming_type, const std::string& origin) {
     TRACE_ALWAYS(("=== RPC: AVControlObject_Create ===\n"));
     TRACE_ALWAYS(("    streaming_type=%d, origin=%s\n", streaming_type, origin.c_str()));
 
-    if (!ensureDependenciesInitialized()) {
+    /*if (!ensureDependenciesInitialized()) {
         TRACE_ERROR(("    FAILED: Dependencies not initialized\n"));
         return 0;
-    }
+    }*/
 
     AVControlObject::StreamingType st = AVControlObject::progressive;
     switch(streaming_type) {
@@ -185,7 +185,7 @@ void AVControlObjectIpcServer::bindToServer(rpc::server& server) {
     TRACE_ALWAYS(("AVControlObjectIpcServer::bindToServer - START\n"));
     TRACE_ALWAYS(("=================================================\n"));
 
-    ensureDependenciesInitialized();
+    //ensureDependenciesInitialized();
 
     server.bind(IPC_NAME(AVControlObject_Create), handle_create);
     TRACE_ALWAYS(("  Bound: AVControlObject_Create\n"));

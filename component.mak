@@ -155,6 +155,14 @@ TARGET_NAME_nebula_external = nebula_src/adaptation_layer/ipc/external
 TARGET_NAME_vewd_common_browser = vewd_common/ipc/browser
 TARGET_NAME_vewd_jspp = vewd_integration/jspp_plugins/ipc/browser
 
+# Add Nebula core where AVControlObject and MediaDataSource live
+LINK_NAMES += nebula_src
+TARGET_NAME_nebula_src = nebula_src
+
+# Ensure nebula_src derived directory is created before the ipc component is linked.
+# This forces nebula objects/libraries to exist before the backend link step.
+CBUILD_FIRST += $(call derived, nebula_src)
+
 ifdef INCLUDE_OPAPP_SUPPORT
 LINK_NAMES += nebula_opapp_external opapp
 
