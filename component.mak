@@ -111,12 +111,8 @@ OBJS +=\
 
 # Add to OBJS list
 OBJS +=\
-    avcontrolobject/AVControlObjectIpcServer \
     avcontrolobject/AVControlObjectIpcClient \
     avcontrolobject/AVControlObjectIpcTypes
-
-
-
 
 
 ifdef INCLUDE_OPAPP_SUPPORT
@@ -146,22 +142,10 @@ COMPONENT_DEFINES += UVA_INCLUDE_OOIF_TYPES
 #
 LINK_NAMES = rpclib nebula_external vewd_common_browser vewd_jspp
 
-# Add to LINK_NAMES
-LINK_NAMES += avcontrolobject
-TARGET_NAME_avcontrolobject = vewd_integration/ipc/avcontrolobject
-
 TARGET_NAME_rpclib = 3rd_party_wrapper/rpclib/src
 TARGET_NAME_nebula_external = nebula_src/adaptation_layer/ipc/external
 TARGET_NAME_vewd_common_browser = vewd_common/ipc/browser
 TARGET_NAME_vewd_jspp = vewd_integration/jspp_plugins/ipc/browser
-
-# Add Nebula core where AVControlObject and MediaDataSource live
-LINK_NAMES += nebula_src
-TARGET_NAME_nebula_src = nebula_src
-
-# Ensure nebula_src derived directory is created before the ipc component is linked.
-# This forces nebula objects/libraries to exist before the backend link step.
-CBUILD_FIRST += $(call derived, nebula_src)
 
 ifdef INCLUDE_OPAPP_SUPPORT
 LINK_NAMES += nebula_opapp_external opapp

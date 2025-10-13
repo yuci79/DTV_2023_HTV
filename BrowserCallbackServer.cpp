@@ -27,7 +27,7 @@ void bindCallbackServer(rpc::server& server)
 
     // CRITICAL FIX: This was missing in your BrowserCallbackServer.cpp
     TRACE_ALWAYS(("Binding AVControlObject server methods...\n"));
-    AVControlObjectIpcServer::bindToServer(server);  // THIS MUST BE CALLED!
+    //AVControlObjectIpcServer::bindToServer(server);  // THIS MUST BE CALLED!
     TRACE_ALWAYS(("AVControlObject server methods bound\n"));
 
     TRACE_ALWAYS(("=================================================\n"));
