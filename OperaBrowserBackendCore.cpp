@@ -84,6 +84,8 @@ bool OperaBrowserBackendCore::initialise()
 
     // Ask Nebula side to start the backend service
     auto success = nebulaRpcCall<frost_bool>(IPC_NAME(NEBULA_MuminStartService), 0);
+    TRACE_INFO(("initialise(): nebulaRpcCall returned %d\n", (int)success));
+
     return success == frost_true;
 }
 
@@ -106,6 +108,7 @@ bool OperaBrowserBackendCore::supportedType(int type)
 
 bool OperaBrowserBackendCore::createMuminBackend(int type, void* client)
 {
+	printf("+++++++++++ OperaBrowserBackendCore::createMuminBackend ++++++++++++\n");
     TRACE_ALWAYS(("%s() \n", __func__));
 
     // If backend not running, start it
@@ -126,6 +129,13 @@ OperaBrowserBackendCore::OperaBrowserBackendCore()
     // callbacks/listeners are registered with the Aurora process.
     BrowserCallbackServer::instance(bindCallbackServer);
     
+    TRACE_INFO(("OperaBrowserBackendCore(): requesting Mumin backend start\n"));
+    if (!initialise()) {
+        TRACE_WARN(("OperaBrowserBackendCore(): Mumin backend initialise() returned false\n"));
+    } else {
+        TRACE_ALWAYS(("OperaBrowserBackendCore(): Mumin backend initialised OK\n"));
+    }
+
     m_event_dispatch_configurer.initialise();
     m_broadcast_components_interface = new NebulaBroadcastComponentsIpcExternal;
     nebula::setBroadcastComponentAccessor(m_broadcast_components_interface);
