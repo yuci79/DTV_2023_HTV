@@ -11,18 +11,18 @@
 #include "nebula/adaptation_layer/ipc/NebulaMuminIpcTypes.hpp"
 #include "utilities_debug/trace.h"
 
-#include "core/browser_client/AVControlObject.hpp"
+#include "nebula/core/browser_client/AVControlObject.hpp"
+#include "nebula/core/browser_client/AnyAVControlObjectEventGenerator.hpp"
 
-#include "utilities_debug/trace.h"
-#include "AnyCommandThread.hpp"
-#include "MediaDataSource.hpp"
-#include "MediaDataSink.hpp"
-#include "AnyAVControlObjectEventGenerator.hpp"
-#include "nebula/core/browser_client/AVControlObjectEventGenerator.hpp"
+// Use the helpers that provide implementations
+#include "vewd_integration/ipc/avcontrolobject/AVControlHelpers.hpp"
+
+#include "utilities_private/CommandThread.hpp"  // Use concrete CommandThread instead of AnyCommandThread
+#include "utilities_public/MediaDataSource.hpp"
+#include "utilities_public/MediaDataSink.hpp"
 
 #include "frost/frost_debug.h"
 #include "frost/frost_threads.h"
-
 
 #include <rpc/server.h>
 #include <map>
@@ -36,12 +36,41 @@ TRACE_IMPLEMENT("nebula/ipc/aurora/NebulaBrowserBackendIpcAurora");
 
 namespace {
 
+// Global service infrastructure
+static CommandThread* s_media_thread = nullptr;
+static AnyAVControlObjectEventGenerator* s_event_generator = nullptr;
+
 // Service state
 static bool s_mumin_service_running = false;
 static std::mutex s_service_mutex;
 
+// Backend instance structure
+struct MuminBackendInstance {
+    AVControlObject* av_control_obj;
+    MediaDataSource* data_source;
+    MediaDataSink* data_sink;
+
+    MuminBackendInstance()
+        : av_control_obj(nullptr)
+        , data_source(nullptr)
+        , data_sink(nullptr)
+    {}
+
+    ~MuminBackendInstance() {
+        if (av_control_obj) {
+            delete av_control_obj;
+        }
+        if (data_source) {
+            delete data_source;
+        }
+        if (data_sink) {
+            delete data_sink;
+        }
+    }
+};
+
 // Backend instance management
-static std::map<intptr_t, void*> s_backend_instances;
+static std::map<intptr_t, MuminBackendInstance*> s_backend_instances;
 static std::atomic<intptr_t> s_next_backend_handle(1000);
 static std::mutex s_backend_mutex;
 
@@ -56,6 +85,18 @@ inline void* from_intptr(intptr_t i) {
 } // anonymous namespace
 
 // ============================================================================
+// Module Initialization
+// ============================================================================
+
+// This will be called when the module loads
+static struct ModuleInitializer {
+    ModuleInitializer() {
+        TRACE_ALWAYS(("=== NebulaBrowserBackendIpcAurora Module Loaded ===\n"));
+        TRACE_ALWAYS(("Initial state: s_mumin_service_running=%d\n", s_mumin_service_running));
+    }
+} s_module_init;
+
+// ============================================================================
 // IPC Handler: Start Mumin Service
 // ============================================================================
 
@@ -64,61 +105,53 @@ static frost_bool handle_MuminStartService(frost_int reserved)
     TRACE_ALWAYS(("=== RPC: NEBULA_MuminStartService ===\n"));
     TRACE_ALWAYS(("reserved=%d\n", reserved));
 
+    TRACE_ALWAYS(("Attempting to acquire service mutex...\n"));
     const std::lock_guard<std::mutex> lock(s_service_mutex);
+    TRACE_ALWAYS(("Service mutex acquired successfully\n"));
+
+    TRACE_ALWAYS(("Current service state: s_mumin_service_running=%d\n", s_mumin_service_running));
+
     if (s_mumin_service_running)
     {
-        TRACE_INFO(("Mumin service already running\n"));
+        TRACE_ALWAYS(("Mumin service already running - returning success\n"));
         return frost_true;
     }
 
+    TRACE_ALWAYS(("Starting Mumin service infrastructure...\n"));
+
     // Step 1. Create the command thread for A/V control
-    static AnyCommandThread* s_media_thread = nullptr;
-    if (!s_media_thread)
+    static CommandThread* s_media_thread = new CommandThread;
+    const int stacksize_hint = 64*1024;
+    if (!s_media_thread || !s_media_thread->initialise("MediaCmdThread",
+                                           FROST_highest_priority,
+                                           stacksize_hint))
     {
-        s_media_thread = new AnyCommandThread();
-        if (!s_media_thread->initialise("MediaCmdThread", FROST_high_priority, 64 * 1024))
-        {
-            TRACE_ERROR(("Failed to initialize media thread\n"));
-            return frost_false;
-        }
-    }
-
-    // Step 2. Prepare source/sink placeholders
-    static MediaDataSource media_source;
-    static MediaDataSink media_sink;
-    static AVControlObjectEventGenerator event_gen;
-
-    // Step 3. Create AVControlObject
-    TRACE_ALWAYS(("Creating AVControlObject...\n"));
-    static AVControlObject* s_av_obj = nullptr;
-    s_av_obj = new AVControlObject(
-        *s_media_thread,
-        AVControlObject::StreamingType::progressive,
-        media_source,
-        media_sink,
-        event_gen,
-        nullptr
-    );
-
-    if (!s_av_obj || !s_av_obj->isInitialised())
-    {
-        TRACE_ERROR(("AVControlObject initialisation failed\n"));
+        TRACE_ERROR(("Command thread initialisation failed!!!\n"));
+        delete s_media_thread;
+        s_media_thread = nullptr;
         return frost_false;
     }
 
-    // Step 4. Set test source and play
-    TRACE_ALWAYS(("Setting test URL...\n"));
-    bool st = s_av_obj->setSource("http://10.135.6.54/test.mp4");
-    if (st != true)
+
+    // Step 2. Get event generator (shared by all backends)
+    if (!s_event_generator)
     {
-        TRACE_ERROR(("setSource failed: %d\n", st));
+        TRACE_ALWAYS(("Getting event generator...\n"));
+        s_event_generator = getEventGeneratorForAv();
+        if (!s_event_generator)
+        {
+            TRACE_ERROR(("Failed to get event generator\n"));
+            return frost_false;
+        }
+        TRACE_ALWAYS(("Event generator obtained: %p\n", (void*)s_event_generator));
     }
 
-    TRACE_ALWAYS(("Calling play()...\n"));
-    s_av_obj->play();
-
     s_mumin_service_running = true;
-    TRACE_ALWAYS(("=== AVControlObject playback started successfully ===\n"));
+    TRACE_ALWAYS(("=== Mumin Service infrastructure started successfully ===\n"));
+    TRACE_ALWAYS(("    CommandThread: %p\n", (void*)s_media_thread));
+    TRACE_ALWAYS(("    EventGenerator: %p\n", (void*)s_event_generator));
+    TRACE_ALWAYS(("=== Ready to create backend instances ===\n"));
+
     return frost_true;
 }
 
@@ -230,27 +263,46 @@ static intptr_t handle_MuminCreateBackend(
 
     const std::lock_guard<std::mutex> lock(s_backend_mutex);
 
-    // Create the actual backend object
-    // TODO: Implement actual backend creation
-    // For now, create a placeholder
+    // Create backend instance structure
+    TRACE_ALWAYS(("Creating backend instance...\n"));
+    MuminBackendInstance* backend = new MuminBackendInstance();
 
-    void* backend_obj = nullptr;
+    // Create MediaDataSource and MediaDataSink for this backend
+    backend->data_source = new MediaDataSource();
+    backend->data_sink = new MediaDataSink();
 
-    // Example of what this should do:
-    // void* client = from_intptr(client_ptr);
-    // auto* factory = OperaMuminObjectFactory::instance();
-    // backend_obj = factory->createMuminBackend(backend_type, static_cast<UVAClient*>(client));
+    // Create AVControlObject for this backend
+    TRACE_ALWAYS(("Creating AVControlObject for backend...\n"));
+    backend->av_control_obj = new AVControlObject(
+        *s_media_thread,
+        AVControlObject::StreamingType::progressive,
+        *backend->data_source,
+        *backend->data_sink,
+        *s_event_generator,
+        nullptr
+    );
 
-    if (!backend_obj) {
-        TRACE_ERROR(("Failed to create backend\n"));
+    if (!backend->av_control_obj || !backend->av_control_obj->isInitialised())
+    {
+        TRACE_ERROR(("Failed to create AVControlObject\n"));
+        delete backend;
+        return 0;
+    }
+
+    TRACE_ALWAYS(("Preparing AVControlObject for playback...\n"));
+    if (!backend->av_control_obj->prepareForPlayback())
+    {
+        TRACE_ERROR(("prepareForPlayback failed\n"));
+        delete backend;
         return 0;
     }
 
     // Assign a handle
     intptr_t handle = s_next_backend_handle.fetch_add(1);
-    s_backend_instances[handle] = backend_obj;
+    s_backend_instances[handle] = backend;
 
-    TRACE_ALWAYS(("=== Backend Created: handle=%ld ===\n", handle));
+    TRACE_ALWAYS(("=== Backend Created: handle=%ld, AVControlObject=%p ===\n",
+                 handle, (void*)backend->av_control_obj));
     return handle;
 }
 
@@ -300,12 +352,17 @@ static frost_bool handle_MuminSetSource(
         return frost_false;
     }
 
-    // TODO: Call setSource on the backend
-    // auto* backend = static_cast<OperaMuminMediaBackend*>(it->second);
-    // return backend->setSource(url.c_str()) == UVA_OK ? frost_true : frost_false;
+    MuminBackendInstance* backend = it->second;
+    if (!backend || !backend->av_control_obj) {
+        TRACE_ERROR(("Invalid backend instance\n"));
+        return frost_false;
+    }
 
-    TRACE_ALWAYS(("=== SetSource SUCCESS ===\n"));
-    return frost_true;
+    TRACE_ALWAYS(("Setting source on AVControlObject %p...\n", (void*)backend->av_control_obj));
+    bool result = backend->av_control_obj->setSource(url.c_str());
+
+    TRACE_ALWAYS(("=== SetSource %s ===\n", result ? "SUCCESS" : "FAILED"));
+    return result ? frost_true : frost_false;
 }
 
 // ============================================================================
@@ -368,6 +425,15 @@ void NebulaBrowserBackendIpcAurora::bindToServer(rpc::server& server)
     TRACE_ALWAYS(("NebulaBrowserBackendIpcAurora::bindToServer - START\n"));
     TRACE_ALWAYS(("=================================================\n"));
 
+    // IMPORTANT: Reset state when binding to ensure clean start
+    TRACE_ALWAYS(("Resetting state before binding...\n"));
+    {
+        const std::lock_guard<std::mutex> lock(s_service_mutex);
+        s_mumin_service_running = false;
+        s_media_thread = nullptr;
+        TRACE_ALWAYS(("State reset: service=false, av_obj=null, thread=null\n"));
+    }
+
     // Service management
     server.bind(IPC_NAME(NEBULA_MuminStartService), handle_MuminStartService);
     TRACE_ALWAYS(("  Bound: NEBULA_MuminStartService\n"));
@@ -405,8 +471,17 @@ void NebulaBrowserBackendIpcAurora::bindToServer(rpc::server& server)
 
 void NebulaBrowserBackendIpcAurora::reset()
 {
-    TRACE_INFO(("NebulaBrowserBackendIpcAurora::reset()\n"));
+    TRACE_ALWAYS(("NebulaBrowserBackendIpcAurora::reset() - START\n"));
+
+    // Force reset the service state
+    {
+        const std::lock_guard<std::mutex> lock(s_service_mutex);
+        s_mumin_service_running = false;
+        TRACE_ALWAYS(("Service state reset to false\n"));
+    }
 
     // Clean up any registered callbacks or state
     handle_MuminStopService();
+
+    TRACE_ALWAYS(("NebulaBrowserBackendIpcAurora::reset() - COMPLETE\n"));
 }
