@@ -19,7 +19,7 @@
 #include "nebula/core/browser_client/AnyAVControlObject.hpp"
 
 #include "utilities_public/MediaDataSource.hpp"
-#include "utilities_public/MediaDataSink.hpp"
+//#include "utilities_public/MediaDataSink.hpp"
 
 #include "utilities_debug/unused.h"
 
@@ -286,8 +286,10 @@ private:
     double calculatePixelAspectRatio();
     bool cancelRequestsForSeekInternal(double new_position_msecs);
     void cancelDataRequestsComplete();
+#if defined(NOVATEK_PLATFORM) || defined(_LINUX_PC_PLATFORM)
 
     void adjustVideoAspectRatio(int& x, int& y, int& w, int& h);
+#endif
 
     bool applyVideoPosition(NEBULA_DisplayWindow &window);
 
@@ -302,7 +304,7 @@ private:
     double m_total_playback_duration_in_secs;
     unsigned int m_backend_video_res_width;
     unsigned int m_backend_video_res_height;
-
+    intptr_t m_backend_handle;
     double m_setposition_time;
     bool m_setposition_request;
     double m_position;
@@ -336,8 +338,13 @@ private:
 
     OperaMuminObjectFactory& m_object_factory;
 
-    MediaDataSource m_media_data_source;
-    MediaDataSink   m_media_data_sink;
+    // Instead of direct objects:
+    // MediaDataSource m_media_data_source;
+    // MediaDataSink   m_media_data_sink;
+
+    // Use handles:
+    intptr_t m_media_data_source_handle;
+    intptr_t m_media_data_sink_handle;
 
     bool m_seek_ok;
     bool m_seek_is_active;

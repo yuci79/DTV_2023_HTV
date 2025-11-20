@@ -89,7 +89,7 @@ public:
      */
     void discardBroadcastSupervisor(AnyVideoBroadcastObject* vb_object,
                                     AnyVbObjectEventGenerator* event_generator);
-
+/*
     bool createOipfVideoOnDemandObject(
                                 AnyAVControlObject** out_av_object,
                                 AnyAVControlObjectEventGenerator* event_generator,
@@ -101,7 +101,7 @@ public:
                                 bool is_rtsp,
                                 bool is_udp,
                                 char* origin);
-
+*/
     void discardOipfVideoOnDemandObject(
                                AnyAVControlObject* object);
 

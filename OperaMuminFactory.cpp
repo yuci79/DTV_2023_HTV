@@ -15,7 +15,7 @@
 #include "utilities_public/UString.hpp"
 #include "uva_backend.h"
 #include "uva_client.h"
-
+#include <stdio.h>
 // @note Do not use Cabot Trace macros (this code is compiled into a .so)
 
 static OperaMuminObjectFactory* g_mumin_object_factory = 0;
@@ -26,6 +26,7 @@ static OperaMuminObjectFactory* g_mumin_object_factory = 0;
 UVABackend*
 UVA_RequestBackend(UVABackend::UVABackendType type, UVAClient* client)
 {
+	printf("++++++++++++++++ UVA_RequestBackend: %d +++++++++++++\n", type);
 #if defined USING_SDK422 || defined USING_SDK423
     OperaBrowserBackendCore::instance();
 #endif
@@ -61,6 +62,8 @@ UVA_ReleaseBackend(UVABackend* backend)
 
 UVAOOIFBackendFactory* UVA_RequestOOIFBackendFactory() 
 {
+	printf("++++++++++++++++ UVA_RequestOOIFBackendFactory+++++++++++++\n");
+
 #if defined USING_SDK422 || defined USING_SDK423
     OperaBrowserBackendCore::instance();
 #endif

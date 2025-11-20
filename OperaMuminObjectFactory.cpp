@@ -20,12 +20,21 @@
 #endif
 #include "config/include_ip_tuner.h" //[d]:added to support IP tuner
 #include "config/enable_vod_over_ip_tuner.h"
-
+//#include "vewd_integration/ipc/avcontrolobject/AVControlObjectIpcClient.hpp" // adjust include path as needed
+//#include "OperaMuminMediaBackendIpc.hpp"
+#include "nebula/core/browser_client/AVControlObject.hpp"
+#include "nebula/adaptation_layer/ipc/NebulaIpcConfiguration.hpp"
+#include "nebula/adaptation_layer/ipc/NebulaMuminIpcTypes.hpp"
+#include "nebula_src/adaptation_layer/ipc/external/NebulaIpcHelper.hpp"
 
 #include "nebula/adaptation_layer/CicamPlayerProvider.hpp"
 #include "nebula/core/browser_client/AnyVideoBroadcastObject.hpp"
 #include "nebula/core/browser_client/AVControlObject.hpp"
 #include "nebula/core/browser_client/WebAudio.hpp"
+#include "nebula/adaptation_layer/ipc/NebulaIpcConfiguration.hpp"
+#include "nebula/adaptation_layer/ipc/NebulaMuminIpcTypes.hpp"
+#include "nebula_src/adaptation_layer/ipc/external/NebulaIpcHelper.hpp"
+
 #include "utilities_private/CommandThread.hpp"
 #include "utilities_public/AnyCommand.hpp"
 #include "eclipse_src/core/Time.hpp"
@@ -67,6 +76,8 @@ OperaMuminObjectFactory::BackendContext::stopContext()
 
 OperaMuminObjectFactory::OperaMuminObjectFactory()
 {
+    TRACE_ALWAYS(("OperaMuminObjectFactory::OperaMuminObjectFactory\n"));
+
 }
 
 bool OperaMuminObjectFactory::initialise()
@@ -85,53 +96,87 @@ OperaMuminObjectFactory::~OperaMuminObjectFactory()
     CABOT_ASSERT(m_backend_contexts.size() == 0);
 }
 
-#ifdef INCLUDE_IP_TUNER
+/*#ifdef INCLUDE_IP_TUNER
 bool OperaMuminObjectFactory::createOipfVideoOnDemandObject(
-                               AnyAVControlObject** out_av_object,
-                               AnyAVControlObjectEventGenerator* event_generator,
-                               AnyCommandThread& media_queue,
-                               AVControlObjectType type,
-                               OperaMuminMediaBackend::StreamingType streaming_type,
-                               MediaDataSource const& media_data_source,
-                               MediaDataSink& media_data_sink,
-                               bool is_rtsp,
-                               bool is_udp,
-                               char* origin) {
+    AnyAVControlObject** out_av_object,
+    AnyAVControlObjectEventGenerator* event_generator,
+    AnyCommandThread& media_queue,
+    AVControlObjectType type,
+    OperaMuminMediaBackend::StreamingType streaming_type,
+    MediaDataSource const& media_data_source,
+    MediaDataSink& media_data_sink,
+    bool is_rtsp,
+    bool is_udp,
+    char* origin)
+{
+    TRACE_ALWAYS(("OperaMuminObjectFactory::createOipfVideoOnDemandObject (IP_TUNER/RPC Mode)\n"));
+
+    // Set dummy object so browser-side checks pass
+    // Real object exists on Aurora side via RPC
+    *out_av_object = reinterpret_cast<AnyAVControlObject*>(0x12345678);
+
+    TRACE_INFO(("Created dummy AV object for RPC: %p\n", *out_av_object));
+    return true;  // Always succeed for RPC mode
+}
+#else
+// Keep original implementation unchanged for non-IP_TUNER builds
+bool OperaMuminObjectFactory::createOipfVideoOnDemandObject(
+    AnyAVControlObject** out_av_object,
+    AnyAVControlObjectEventGenerator* event_generator,
+    AnyCommandThread& media_queue,
+    AVControlObjectType type,
+    OperaMuminMediaBackend::StreamingType streaming_type,
+    MediaDataSource const& media_data_source,
+    MediaDataSink& media_data_sink,
+    bool is_rtsp,
+    bool is_udp,
+    char* origin)
+{
+    TRACE_ALWAYS(("OperaMuminObjectFactory::createOipfVideoOnDemandObject (Original Mode)\n"));
 
     FrostMutexLock lock(m_av_object_mutex);
+    AnyAVControlObject* av_object = NULL;
 
-    // Convert to integer streaming type for RPC
-    int av_streaming_type;
-    if (is_rtsp) {
-        av_streaming_type = 2; // rtsp
-    } else if (is_udp) {
-        av_streaming_type = 3; // udp
-    } else {
-        av_streaming_type = (streaming_type == OperaMuminMediaBackend::mse) ? 1 : 0; // mse : progressive
+    {
+        AVControlObject::StreamingType streaming_type_enum;
+
+        if (is_rtsp)
+        {
+            streaming_type_enum = AVControlObject::rtsp;
+        }
+        else if (is_udp)
+        {
+            streaming_type_enum = AVControlObject::udp;
+        }
+        else
+        {
+            streaming_type_enum = (streaming_type == OperaMuminMediaBackend::mse) ?
+                        AVControlObject::mse : AVControlObject::progressive;
+        }
+
+        av_object = new AVControlObject(media_queue, streaming_type_enum,
+                media_data_source, media_data_sink, *event_generator, origin);
     }
 
-    // Create IPC client instead of direct object
-    auto* av_object = new AVControlObjectIpcClient(media_queue, av_streaming_type,
-                                                  media_data_source, media_data_sink,
-                                                  *event_generator, origin);
-
-    if (av_object && av_object->isInitialised()) {
+    if (av_object && av_object->isInitialised())
+    {
         *out_av_object = av_object;
-        TRACE_INFO(("Created AVControlObject IPC client: %p\n", av_object));
+        TRACE_INFO(("Created real AV object : %p\n", av_object));
         return true;
     }
 
-    TRACE_ERROR(("Failed to create AVControlObject IPC client\n"));
+    TRACE_ERROR(("Failed to create AV object\n"));
     delete av_object;
     return false;
 }
-
+#endif
+*/
 void
 OperaMuminObjectFactory::discardOipfVideoOnDemandObject(AnyAVControlObject* av_object)
 {
     delete av_object;
 }
-#endif
+
 
 bool
 OperaMuminObjectFactory::createOipfVideoBroadcastObject(
@@ -227,9 +272,9 @@ OperaMuminObjectFactory::createMuminBackend(
         case UVABackend::UVAAudioBackendType:
         {
 //#ifndef INCLUDE_IP_TUNER
-            UVAMediaBackend* media_backend = nullptr;
+           // UVAMediaBackend* media_backend = nullptr;
 //#endif
-#if !defined USING_SDK422 && !defined USING_SDK423
+#if 1//!defined USING_SDK422 && !defined USING_SDK423
 #ifndef INCLUDE_IP_TUNER
             
             auto cicam_player = nebula::cicamPlayer();
@@ -252,13 +297,31 @@ OperaMuminObjectFactory::createMuminBackend(
                 }
             }
 #else
-            PrioritisedCommandThread* queue = new PrioritisedCommandThread();
+            // PrioritisedCommandThread* queue = new PrioritisedCommandThread();
+
+            auto queue_handle = nebulaRpcCall<intptr_t>(
+                IPC_NAME(NEBULA_CreatePrioritisedCommandThread)
+            );
+            PrioritisedCommandThread* queue = reinterpret_cast<PrioritisedCommandThread*>(queue_handle);
+
             if (!queue)
             {
                 return NULLPTR;
             }
 
-            if (!queue->initialise("Media playback queue", FROST_high_priority, 64 * 1024))
+
+            // if (!queue->initialise("Media playback queue", FROST_high_priority, 64 * 1024))
+
+            auto init_result = nebulaRpcCall<frost_bool>(
+                IPC_NAME(NEBULA_PrioritisedCommandThreadInitialise),
+                queue_handle,
+                reinterpret_cast<intptr_t>("Media playback queue"),
+                static_cast<int>(FROST_high_priority),
+                64 * 1024,
+                0  // queue_size parameter
+            );
+
+            if (!init_result)
             {
                 delete queue;
                 return NULLPTR;
@@ -276,7 +339,17 @@ OperaMuminObjectFactory::createMuminBackend(
             TRACE_INFO(("requestBackend: Created Media backend %p\n", media_backend));
 #endif
 #endif
+
+//#ifndef INCLUDE_IP_TUNER
             return media_backend;
+//#endif
+/*            TRACE_INFO(("requestBackend: Creating IPC Media backend\n"));
+
+            // Create IPC wrapper instead of OperaMuminMediaBackend
+            UVAMediaBackend* media_backend = new OperaMuminMediaBackendIpc(type, client);
+
+            TRACE_INFO(("requestBackend: Created IPC Media backend %p\n", media_backend));
+            return media_backend;*/
         }
         default:
             TRACE_WARN(("createMuminBackend: NOT SUPPORTED type: %d, client: %p\n", type, client));
