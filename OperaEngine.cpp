@@ -252,6 +252,7 @@ extern "C" int platform_Insmod(const char* module_path);
 #include <algorithm>
 #include <csignal>
 #include <vector>
+#include <stdio.h>
 
 TRACE_IMPLEMENT("opera/engine");
 
@@ -6001,6 +6002,7 @@ OperaEngine::setMediaPlayerPosition(double x,
                                     double width,
                                     double height)
 {
+	printf("+++++++++++++++ OperaEngine::setMediaPlayerPosition : width: %d, height: %d ++++++++++++++++\n", width, height);
     FrostReadMutexLock lock(m_initialisation_mutex);
 
     if (!initialisationCompletedLocked())
